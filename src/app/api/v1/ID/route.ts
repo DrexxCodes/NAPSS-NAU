@@ -185,7 +185,7 @@ export async function GET(request: NextRequest) {
     // Check if no API key provided (welcome message with HTML for browser)
     if (!apiKey) {
       const userAgent = request.headers.get('user-agent') || ''
-      const isBrowser = userAgent.includes('Mozilla') || userAgent.includes('Chrome') || userAgent.includes('Safari') || userAgent.includes('Firefox')
+      userAgent.includes('Mozilla') || userAgent.includes('Chrome') || userAgent.includes('Safari') || userAgent.includes('Firefox')
       
       
       // For API clients (JSON response)
