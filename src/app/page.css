@@ -1,0 +1,44 @@
+.main-page {
+  min-height: 100vh;
+}
+
+.placeholder-section {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-section {
+  background: rgba(248, 250, 252, 0.3);
+}
+
+[data-theme="dark"] .card-section {
+  background: rgba(15, 23, 42, 0.3);
+}
+
+.placeholder-content {
+  text-align: center;
+  max-width: 32rem;
+  padding: 0 1rem;
+}
+
+.placeholder-title {
+  font-size: 2.25rem;
+  font-weight: bold;
+  color: var(--foreground);
+  margin-bottom: 1rem;
+}
+
+.placeholder-description {
+  color: var(--muted-foreground);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+/* Responsive Design */
+@media (min-width: 768px) {
+  .placeholder-title {
+    font-size: 2.5rem;
+  }
+}
