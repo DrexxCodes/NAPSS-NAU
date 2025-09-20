@@ -253,9 +253,9 @@ export default function Dialog({
               <div className="next-steps">
                 <h4>What&apos;s Next?</h4>
                 <ul>
-                  <li>📧 Check your email for confirmation details</li>
-                  <li>🆔 Your student ID will be generated within 24 hours</li>
-                  <li>📚 Access to course materials will be available soon</li>
+                  <li>📧 Wait for email confirmation when virtual ID is available</li>
+                  <li>🎟 Sign up on Spotix if you're yet to</li>
+                  <li>📣 Stay tuned for the date we start encoding smart ID</li>
                 </ul>
               </div>
             </div>
