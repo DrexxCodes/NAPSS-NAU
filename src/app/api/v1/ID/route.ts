@@ -202,10 +202,10 @@ export async function GET(request: NextRequest) {
             rateLimit: "5 requests per minute per API key",
             requiredParameters: ["key", "id"],
             developer: "Drexx codes",
-            administration: "Anchor Armstrong led administration"
+            administration: "Achor Armstrong led administration"
           },
           documentation: {
-            baseUrl: "https://yoursite.com/api/v1/id",
+            baseUrl: "https://napss-nau.vercel.app/api/v1/ID",
             authentication: "API Key required",
             responseFormat: "JSON",
             example: {
@@ -213,8 +213,8 @@ export async function GET(request: NextRequest) {
               response: {
                 success: true,
                 data: {
-                  firstName: "John",
-                  surname: "Doe",
+                  firstName: "Olaleye",
+                  surname: "Cosmas",
                   currentClass: "300 Level"
                 }
               }

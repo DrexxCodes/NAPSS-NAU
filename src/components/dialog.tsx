@@ -254,7 +254,7 @@ export default function Dialog({
                 <h4>What&apos;s Next?</h4>
                 <ul>
                   <li>📧 Wait for email confirmation when virtual ID is available</li>
-                  <li>🎟 Sign up on Spotix if you're yet to</li>
+                  <li>🎟 Sign up on Spotix if you&apos;re yet to</li>
                   <li>📣 Stay tuned for the date we start encoding smart ID</li>
                 </ul>
               </div>

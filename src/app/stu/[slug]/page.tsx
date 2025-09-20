@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     if (docSnap.exists()) {
       const student = docSnap.data() as StudentData
       const fullName = `${student.surname}, ${student.firstName} ${student.lastName}`
-      const description = `${student.surname}'s digital ID card created on NAPSS Unizik Cloud Database. An Anchor Armstrong led administration. Developed by Drexx codes`
+      const description = `${student.surname}'s digital ID card created on NAPSS Unizik Cloud Database. An Achor Armstrong led administration. Developed by Drexx codes`
 
       return {
         title: `${fullName} - Digital ID`,
