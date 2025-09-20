@@ -10,7 +10,7 @@ export default function Custom404() {
   const [typedText, setTypedText] = useState("")
   const [showError, setShowError] = useState(false)
   const [showMessage, setShowMessage] = useState(false)
-  const [animationPhase, setAnimationPhase] = useState<"url" | "clearing" | "drexx" | "clearing2">("url")
+  const [] = useState<"url" | "clearing" | "drexx" | "clearing2">("url")
 
   useEffect(() => {
     // Get the current URL
@@ -109,7 +109,7 @@ export default function Custom404() {
         {showMessage && (
           <div className="error-message fade-in">
             <p>
-              Oh, um, I don't think the page you're looking for is accessible on this server. Might be a broken link or
+              Oh, um, I don&apos;t think the page you&apos;re looking for is accessible on this server. Might be a broken link or
               maybe you typed something wrong.
             </p>
           </div>

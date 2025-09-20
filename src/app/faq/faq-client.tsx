@@ -192,7 +192,7 @@ export default function FAQClient() {
         <div className="results-summary">
           <p>
             Showing <strong>{filteredFAQs.length}</strong> result{filteredFAQs.length !== 1 ? 's' : ''}
-            {searchTerm && <> for "<em>{searchTerm}</em>"</>}
+            {searchTerm && <> for <em>{searchTerm}</em></>}
             {activeCategory !== "All" && <> in <strong>{activeCategory}</strong></>}
           </p>
           {filteredFAQs.length === 0 && (
@@ -239,7 +239,7 @@ export default function FAQClient() {
       <div className="faq-footer">
         <div className="support-cta">
           <h3>Still have questions? 🤔</h3>
-          <p>Can't find what you're looking for? Our support team is here to help!</p>
+          <p>Can&apos;t find what you&apos;re looking for? Our support team is here to help!</p>
           <div className="support-actions">
             <a href="https://wa.me/+2348123927685" className="support-btn primary">
               <span className="btn-icon">💬</span>

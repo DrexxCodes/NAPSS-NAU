@@ -5,7 +5,7 @@ import { useTheme } from "@/contexts/theme-context"
 import { Button } from "@/components/ui/button"
 
 export function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme()
+  const { toggleTheme } = useTheme()
 
   return (
     <Button variant="ghost" size="small" onClick={toggleTheme} className="h-9 w-9">

@@ -32,6 +32,13 @@ interface Level {
   order?: number
 }
 
+// Custom error interface for better type safety
+interface EnrollmentError {
+  message: string
+  code?: string
+  [key: string]: unknown
+}
+
 export default function EnrollmentForm() {
   const [selectedLevel, setSelectedLevel] = useState("")
   const [showFields, setShowFields] = useState(false)
@@ -216,21 +223,31 @@ export default function EnrollmentForm() {
       })
       setSelectedLevel("")
       setShowFields(false)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Enrollment failed:", error)
       
       // Handle specific error cases with more detailed messages
       let errorMessage = "Failed to submit enrollment. Please try again."
-      if (error.message) {
-        if (error.message.includes("already been enrolled")) {
-          errorMessage = error.message // Use the specific error message from Firebase
-        } else if (error.message.includes("network")) {
-          errorMessage = "Network error. Please check your internet connection and try again."
-        } else if (error.message.includes("permission")) {
-          errorMessage = "Access denied. Please contact the administrator."
-        } else {
-          errorMessage = error.message
+      
+      // Type guard to safely access error properties
+      if (error instanceof Error) {
+        const errorObj = error as unknown as EnrollmentError
+        if (errorObj.message) {
+          if (errorObj.message.includes("already been enrolled")) {
+            errorMessage = errorObj.message // Use the specific error message from Firebase
+          } else if (errorObj.message.includes("network")) {
+            errorMessage = "Network error. Please check your internet connection and try again."
+          } else if (errorObj.message.includes("permission")) {
+            errorMessage = "Access denied. Please contact the administrator."
+          } else {
+            errorMessage = errorObj.message
+          }
         }
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        const errorObj = error as EnrollmentError
+        errorMessage = errorObj.message || errorMessage
       }
       
       setError(errorMessage)
