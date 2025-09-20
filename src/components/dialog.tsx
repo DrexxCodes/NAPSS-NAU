@@ -16,12 +16,12 @@ interface StudentData {
   schoolEmail: string
 }
 
-interface Level {
-  id: string
-  name: string
-  active: boolean
-  order?: number
-}
+// interface Level {
+//   id: string
+//   name: string
+//   active: boolean
+//   order?: number
+// }
 
 interface DialogProps {
   type: 'confirmation' | 'enrolling' | 'success' | 'error'

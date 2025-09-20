@@ -68,7 +68,7 @@ export default function EnrollmentForm() {
       try {
         setIsLoadingLevels(true)
         const fetchedLevels = await fetchLevels()
-        setLevels(fetchedLevels as Level[])
+        setLevels(fetchedLevels as unknown as Level[])
         setError(null)
       } catch (err) {
         console.error("Failed to fetch levels:", err)
@@ -190,7 +190,12 @@ export default function EnrollmentForm() {
 
   const handleActualSubmit = async () => {
     try {
-      const result = await submitEnrollment(formData)
+      const enrichedFormData = {
+        ...formData,
+        createdAt: new Date(),
+        status: "pending"
+      }
+      const result = await submitEnrollment(enrichedFormData)
       console.log("Enrollment successful:", result)
       
       // Show success dialog

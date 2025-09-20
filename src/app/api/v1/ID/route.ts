@@ -6,8 +6,8 @@ interface ApiKeyData {
   id: string
   name: string
   isBanned: boolean
-  createdAt: any
-  lastUsed: any
+  createdAt: { seconds: number; nanoseconds: number } | null
+  lastUsed: { seconds: number; nanoseconds: number } | null
   requestCount: number
   logs: ApiLog[]
 }
@@ -15,7 +15,7 @@ interface ApiKeyData {
 interface ApiLog {
   studentId: string
   response: string
-  timestamp: any
+  timestamp: { seconds: number; nanoseconds: number } | null
   ipAddress?: string
   userAgent?: string
 }
@@ -67,8 +67,13 @@ const checkRateLimit = (logs: ApiLog[]): boolean => {
   
   // Count requests in the last minute
   const recentRequests = logs.filter(log => {
-    const logTime = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp)
-    return logTime > oneMinuteAgo
+    let logTime: Date | null = null
+    if (log.timestamp && typeof log.timestamp.seconds === "number" && typeof log.timestamp.nanoseconds === "number") {
+      logTime = new Date(log.timestamp.seconds * 1000 + Math.floor(log.timestamp.nanoseconds / 1000000))
+    } else if (log.timestamp) {
+      logTime = new Date(log.timestamp as any)
+    }
+    return logTime && logTime > oneMinuteAgo
   })
   
   return recentRequests.length >= 5
@@ -120,7 +125,13 @@ const logRequest = async (apiKeyId: string, studentId: string, response: string,
     const logEntry: ApiLog = {
       studentId,
       response,
-      timestamp: new Date(),
+      timestamp: (() => {
+        const now = Date.now();
+        return {
+          seconds: Math.floor(now / 1000),
+          nanoseconds: (now % 1000) * 1000000
+        };
+      })(),
       ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
       userAgent: request.headers.get('user-agent') || 'unknown'
     }

@@ -1,23 +1,27 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { doc, getDoc, updateDoc, arrayUnion, setDoc } from "firebase/firestore"
+import { doc, getDoc, updateDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 
 interface ApiKeyData {
   id: string
   name: string
   isBanned: boolean
-  createdAt: any
-  lastUsed: any
+  createdAt: { seconds: number; nanoseconds: number } | null
+  lastUsed: { seconds: number; nanoseconds: number } | null
   requestCount: number
   logs: ApiLog[]
-  rateLimitReset?: any // Timestamp when rate limit resets
+rateLimitReset?: {
+  toDate?: () => Date;
+  seconds: number;
+  nanoseconds: number;
+} | null; // Timestamp when rate limit resets
   isRateLimited?: boolean
 }
 
 interface ApiLog {
   studentId: string
   response: string
-  timestamp: any
+  timestamp: { seconds: number; nanoseconds: number } | null
   ipAddress?: string
   userAgent?: string
 }
@@ -33,7 +37,7 @@ interface StudentData {
   yearOfAdmission: string
   dateOfBirth: string
   level: string
-  createdAt: any
+  createdAt: { seconds: number; nanoseconds: number } | null
   status: string
 }
 
@@ -69,7 +73,20 @@ const checkAndUpdateRateLimit = async (apiKeyId: string, apiKeyData: ApiKeyData)
   
   // Check if currently rate limited and if reset time has passed
   if (apiKeyData.isRateLimited && apiKeyData.rateLimitReset) {
-    const resetTime = apiKeyData.rateLimitReset.toDate ? apiKeyData.rateLimitReset.toDate() : new Date(apiKeyData.rateLimitReset)
+    let resetTime: Date;
+    if (apiKeyData.rateLimitReset?.toDate) {
+      resetTime = apiKeyData.rateLimitReset.toDate();
+    } else if (
+      typeof apiKeyData.rateLimitReset?.seconds === "number" &&
+      typeof apiKeyData.rateLimitReset?.nanoseconds === "number"
+    ) {
+      resetTime = new Date(
+        apiKeyData.rateLimitReset.seconds * 1000 +
+        Math.floor(apiKeyData.rateLimitReset.nanoseconds / 1000000)
+      );
+    } else {
+      resetTime = new Date();
+    }
     if (now < resetTime) {
       return { isLimited: true, remainingRequests: 0, resetTime }
     } else {
@@ -83,7 +100,12 @@ const checkAndUpdateRateLimit = async (apiKeyId: string, apiKeyData: ApiKeyData)
   
   // Count requests in the last minute
   const recentLogs = (apiKeyData.logs || []).filter(log => {
-    const logTime = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp)
+    const logTime = log.timestamp
+      ? new Date(
+          log.timestamp.seconds * 1000 +
+          Math.floor(log.timestamp.nanoseconds / 1000000)
+        )
+      : new Date()
     return logTime > oneMinuteAgo
   })
   
@@ -110,8 +132,18 @@ const keepLastFiveLogs = (logs: ApiLog[]): ApiLog[] => {
   // Sort by timestamp (most recent first) and keep only last 5
   return logs
     .sort((a, b) => {
-      const timeA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp)
-      const timeB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp)
+      const timeA = a.timestamp
+        ? new Date(
+            a.timestamp.seconds * 1000 +
+            Math.floor(a.timestamp.nanoseconds / 1000000)
+          )
+        : new Date();
+      const timeB = b.timestamp
+        ? new Date(
+            b.timestamp.seconds * 1000 +
+            Math.floor(b.timestamp.nanoseconds / 1000000)
+          )
+        : new Date();
       return timeB.getTime() - timeA.getTime()
     })
     .slice(0, 5)
@@ -163,7 +195,13 @@ const logRequest = async (apiKeyId: string, studentId: string, response: string,
     const logEntry: ApiLog = {
       studentId,
       response,
-      timestamp: new Date(),
+      timestamp: (() => {
+        const now = Date.now();
+        return {
+          seconds: Math.floor(now / 1000),
+          nanoseconds: (now % 1000) * 1000000
+        };
+      })(),
       ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
       userAgent: request.headers.get('user-agent') || 'unknown'
     }
