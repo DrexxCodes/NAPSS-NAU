@@ -251,7 +251,7 @@ export default function Dialog({
               </div>
               
               <div className="next-steps">
-                <h4>What's Next?</h4>
+                <h4>What&apos;s Next?</h4>
                 <ul>
                   <li>📧 Check your email for confirmation details</li>
                   <li>🆔 Your student ID will be generated within 24 hours</li>
@@ -263,7 +263,7 @@ export default function Dialog({
             <div className="dialog-actions">
               <button onClick={onClose} className="dialog-btn primary full-width">
                 <span className="btn-icon">🚀</span>
-                Awesome, let's go!
+                Awesome, let&apos;s go!
               </button>
             </div>
           </>
@@ -287,7 +287,7 @@ export default function Dialog({
                       <li>Double-check your registration number for typos</li>
                       <li>Contact the registrar if you believe this is an error</li>
                       <li>Use a different registration number if this is a new enrollment</li>
-                      <li>Check if you've already completed enrollment previously</li>
+                      <li>Check if you&apos;ve already completed enrollment previously</li>
                     </>
                   ) : (
                     <>

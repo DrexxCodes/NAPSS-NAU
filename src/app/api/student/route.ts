@@ -1,6 +1,26 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { doc, getDoc } from "firebase/firestore"
+import { doc, getDoc, updateDoc, arrayUnion, setDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
+
+interface ApiKeyData {
+  id: string
+  name: string
+  isBanned: boolean
+  createdAt: any
+  lastUsed: any
+  requestCount: number
+  logs: ApiLog[]
+  rateLimitReset?: any // Timestamp when rate limit resets
+  isRateLimited?: boolean
+}
+
+interface ApiLog {
+  studentId: string
+  response: string
+  timestamp: any
+  ipAddress?: string
+  userAgent?: string
+}
 
 interface StudentData {
   surname: string
@@ -11,14 +31,14 @@ interface StudentData {
   schoolEmail: string
   registrationNumber: string
   yearOfAdmission: string
+  dateOfBirth: string
   level: string
-  stuPic?: string
   createdAt: any
   status: string
 }
 
 // Function to calculate current class based on admission year
-const calculateClass = (yearOfAdmission: string): string => {
+const calculateCurrentClass = (yearOfAdmission: string): string => {
   const admissionYear = parseInt(yearOfAdmission)
   const currentDate = new Date()
   const currentYear = currentDate.getFullYear()
@@ -42,316 +62,387 @@ const calculateClass = (yearOfAdmission: string): string => {
   return `${classLevel} Level`
 }
 
-export async function GET(request: NextRequest) {
-  console.log("API Route called with URL:", request.url)
+// Enhanced rate limiting helper
+const checkAndUpdateRateLimit = async (apiKeyId: string, apiKeyData: ApiKeyData): Promise<{ isLimited: boolean, remainingRequests: number, resetTime?: Date }> => {
+  const now = new Date()
+  const oneMinuteAgo = new Date(now.getTime() - 60 * 1000)
   
-  const { searchParams } = new URL(request.url)
-  const studentId = searchParams.get("id")
-
-  console.log("Student ID from params:", studentId)
-
-  if (!studentId) {
-    console.log("No student ID provided")
-    return new NextResponse(
-      JSON.stringify({ error: "Student ID is required" }), 
-      { 
-        status: 400,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    )
-  }
-
-  try {
-    console.log("Attempting to fetch student with ID:", studentId)
-    
-    // Try to get the document from Firestore
-    const studentDocRef = doc(db, "enrollments", studentId)
-    const docSnap = await getDoc(studentDocRef)
-
-    console.log("Document exists:", docSnap.exists())
-
-    if (!docSnap.exists()) {
-      console.log("Student not found in database")
-      
-      // Return a proper 404 response with meta tags for the not found case
-      const notFoundHtml = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Student Not Found - NAPSS UNIZIK</title>
-          <meta name="description" content="Student with ID ${studentId} not found in NAPSS UNIZIK database.">
-          
-          <!-- Open Graph / Facebook -->
-          <meta property="og:type" content="website">
-          <meta property="og:url" content="${request.url}">
-          <meta property="og:title" content="Student Not Found - NAPSS UNIZIK">
-          <meta property="og:description" content="The requested student ID was not found in our database.">
-          <meta property="og:image" content="${new URL("/napss.png", request.url).toString()}">
-          <meta property="og:site_name" content="NAPSS UNIZIK Digital ID">
-          
-          <!-- Twitter -->
-          <meta property="twitter:card" content="summary">
-          <meta property="twitter:title" content="Student Not Found">
-          <meta property="twitter:description" content="The requested student ID was not found.">
-          
-          <!-- Redirect to student page anyway (it will show the error message) -->
-          <meta http-equiv="refresh" content="2; url=/stu/${studentId}">
-        </head>
-        <body>
-          <div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">
-            <h1>Student Not Found</h1>
-            <p>Student ID "${studentId}" was not found in our database.</p>
-            <p>Redirecting to student page...</p>
-            <a href="/stu/${studentId}" style="color: #dc2626; text-decoration: none;">Click here if not redirected automatically</a>
-          </div>
-        </body>
-      </html>
-      `
-      
-      return new NextResponse(notFoundHtml, {
-        status: 404,
-        headers: {
-          "Content-Type": "text/html",
-        },
+  // Check if currently rate limited and if reset time has passed
+  if (apiKeyData.isRateLimited && apiKeyData.rateLimitReset) {
+    const resetTime = apiKeyData.rateLimitReset.toDate ? apiKeyData.rateLimitReset.toDate() : new Date(apiKeyData.rateLimitReset)
+    if (now < resetTime) {
+      return { isLimited: true, remainingRequests: 0, resetTime }
+    } else {
+      // Reset the rate limit
+      await updateDoc(doc(db, "Api", apiKeyId), {
+        isRateLimited: false,
+        rateLimitReset: null
       })
     }
+  }
+  
+  // Count requests in the last minute
+  const recentLogs = (apiKeyData.logs || []).filter(log => {
+    const logTime = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp)
+    return logTime > oneMinuteAgo
+  })
+  
+  const requestsInLastMinute = recentLogs.length
+  const remainingRequests = Math.max(0, 5 - requestsInLastMinute)
+  
+  // If 5 requests reached, set rate limit
+  if (requestsInLastMinute >= 5) {
+    const resetTime = new Date(now.getTime() + 60 * 1000) // Reset after 1 minute
+    await updateDoc(doc(db, "Api", apiKeyId), {
+      isRateLimited: true,
+      rateLimitReset: resetTime
+    })
+    return { isLimited: true, remainingRequests: 0, resetTime }
+  }
+  
+  return { isLimited: false, remainingRequests }
+}
 
-    const student = docSnap.data() as StudentData
-    console.log("Student data retrieved:", student.registrationNumber)
+// Helper to keep only last 5 logs
+const keepLastFiveLogs = (logs: ApiLog[]): ApiLog[] => {
+  if (logs.length <= 5) return logs
+  
+  // Sort by timestamp (most recent first) and keep only last 5
+  return logs
+    .sort((a, b) => {
+      const timeA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp)
+      const timeB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp)
+      return timeB.getTime() - timeA.getTime()
+    })
+    .slice(0, 5)
+}
 
-    const fullName = `${student.surname}, ${student.firstName} ${student.lastName}`
-    const currentClass = calculateClass(student.yearOfAdmission)
-    const description = `${student.firstName} ${student.surname}'s digital ID card - ${currentClass} student at NAPSS UNIZIK. Created on NAPSS Unizik Cloud Database. An Anchor Armstrong led administration. Developed by Drexx codes`
+// Helper to create error response
+const createErrorResponse = (message: string, statusCode: number, details?: any) => {
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        message,
+        code: statusCode,
+        timestamp: new Date().toISOString(),
+        ...details
+      }
+    },
+    { status: statusCode }
+  )
+}
 
-    // Create a more comprehensive HTML response with better meta tags
-    const html = `
-    <!DOCTYPE html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>${fullName} - ${currentClass} | NAPSS UNIZIK Digital ID</title>
-        <meta name="description" content="${description}">
-        
-        <!-- Open Graph / Facebook -->
-        <meta property="og:type" content="profile">
-        <meta property="og:url" content="${request.url}">
-        <meta property="og:title" content="${fullName} - ${currentClass}">
-        <meta property="og:description" content="${description}">
-        <meta property="og:image" content="${new URL("/napss.png", request.url).toString()}">
-        <meta property="og:image:width" content="1200">
-        <meta property="og:image:height" content="630">
-        <meta property="og:image:alt" content="NAPSS UNIZIK Digital ID Card">
-        <meta property="og:site_name" content="NAPSS UNIZIK Digital ID">
-        <meta property="og:locale" content="en_US">
-        
-        <!-- Twitter -->
-        <meta property="twitter:card" content="summary_large_image">
-        <meta property="twitter:url" content="${request.url}">
-        <meta property="twitter:title" content="${fullName} - ${currentClass}">
-        <meta property="twitter:description" content="${description}">
-        <meta property="twitter:image" content="${new URL("/napss.png", request.url).toString()}">
-        <meta property="twitter:image:alt" content="NAPSS UNIZIK Digital ID Card">
-        
-        <!-- Additional structured data -->
-        <script type="application/ld+json">
-        {
-          "@context": "https://schema.org",
-          "@type": "Person",
-          "name": "${fullName}",
-          "description": "${currentClass} student at NAPSS UNIZIK",
-          "affiliation": {
-            "@type": "Organization",
-            "name": "NAPSS UNIZIK"
-          },
-          "url": "${request.url}"
-        }
-        </script>
-        
-        <!-- Additional meta tags -->
-        <meta name="author" content="Drexx codes">
-        <meta name="keywords" content="NAPSS, UNIZIK, Digital ID, Student Card, NFC, ${student.firstName}, ${student.surname}, ${currentClass}">
-        <meta name="robots" content="index, follow">
-        <meta name="theme-color" content="#667eea">
-        
-        <!-- Canonical URL -->
-        <link rel="canonical" href="/stu/${studentId}">
-        
-        <!-- Favicon -->
-        <link rel="icon" href="/favicon.ico">
-        <link rel="apple-touch-icon" href="/napss.png">
-        
-        <!-- Redirect to actual student page -->
-        <meta http-equiv="refresh" content="0; url=/stu/${studentId}">
-        <script>
-          // Immediate redirect
-          if (typeof window !== 'undefined') {
-            window.location.replace('/stu/${studentId}');
-          }
-        </script>
-        
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          .container {
-            text-align: center;
-            padding: 2rem;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            max-width: 500px;
-            margin: 2rem;
-          }
-          .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-top: 3px solid white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1rem auto;
-          }
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-          h1 {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-            font-weight: 700;
-          }
-          p {
-            margin-bottom: 1rem;
-            opacity: 0.9;
-            line-height: 1.6;
-          }
-          a {
-            color: #ffeaa7;
-            text-decoration: none;
-            font-weight: 600;
-            padding: 0.5rem 1rem;
-            border: 1px solid rgba(255, 234, 167, 0.3);
-            border-radius: 8px;
-            display: inline-block;
-            margin-top: 1rem;
-            transition: all 0.3s ease;
-          }
-          a:hover {
-            background: rgba(255, 234, 167, 0.1);
-            transform: translateY(-2px);
-          }
-          .student-info {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
-            padding: 1rem;
-            margin: 1rem 0;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-          }
-          .class-badge {
-            background: linear-gradient(135deg, #00b894, #00a085);
-            color: white;
-            padding: 0.25rem 0.75rem;
-            border-radius: 15px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            display: inline-block;
-            margin: 0.5rem 0;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="spinner"></div>
-          <h1>${fullName}</h1>
-          <div class="student-info">
-            <div class="class-badge">${currentClass}</div>
-            <p><strong>Registration:</strong> ${student.registrationNumber}</p>
-            <p><strong>Status:</strong> ${student.status.toUpperCase()}</p>
-          </div>
-          <p>Loading digital ID card...</p>
-          <p><small>${description}</small></p>
-          <a href="/stu/${studentId}">View Digital ID Card →</a>
-        </div>
-      </body>
-    </html>
-    `
-
-    return new NextResponse(html, {
+// Helper to create success response
+const createSuccessResponse = (data: any) => {
+  return NextResponse.json(
+    {
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+      api: {
+        name: "NAPSS Unizik IDMS API",
+        version: "1.0.0",
+        description: "Identity Management System API"
+      }
+    },
+    { 
       status: 200,
       headers: {
-        "Content-Type": "text/html",
-        "Cache-Control": "public, max-age=3600, s-maxage=3600", // Cache for 1 hour
-      },
+        'Content-Type': 'application/json',
+        'X-API-Version': '1.0.0',
+        'X-Rate-Limit': '5 requests per minute'
+      }
+    }
+  )
+}
+
+// Helper to log request with proper count and log management
+const logRequest = async (apiKeyId: string, studentId: string, response: string, request: NextRequest) => {
+  try {
+    const logEntry: ApiLog = {
+      studentId,
+      response,
+      timestamp: new Date(),
+      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+      userAgent: request.headers.get('user-agent') || 'unknown'
+    }
+
+    const apiKeyRef = doc(db, "Api", apiKeyId)
+    const currentDoc = await getDoc(apiKeyRef)
+    const currentData = currentDoc.data() as ApiKeyData
+    
+    // Get current logs and add new one
+    const currentLogs = currentData?.logs || []
+    const updatedLogs = [logEntry, ...currentLogs]
+    
+    // Keep only last 5 logs
+    const finalLogs = keepLastFiveLogs(updatedLogs)
+    
+    // Update document with new log, incremented count, and trimmed logs
+    await updateDoc(apiKeyRef, {
+      logs: finalLogs,
+      lastUsed: new Date(),
+      requestCount: (currentData?.requestCount || 0) + 1
     })
   } catch (error) {
-    console.error("Error fetching student data:", error)
-    
-    const errorHtml = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Error - NAPSS UNIZIK Digital ID</title>
-        <meta name="description" content="An error occurred while loading the student information.">
-        <meta property="og:title" content="Error Loading Student Information">
-        <meta property="og:description" content="There was a technical issue loading this student's digital ID.">
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #dc2626, #b91c1c);
-            color: white;
-            text-align: center;
-            padding: 50px;
-            margin: 0;
-          }
-          .error-container {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 2rem;
-            display: inline-block;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-          }
-        </style>
-      </head>
-      <body>
-        <div class="error-container">
-          <h1>⚠️ Technical Error</h1>
-          <p>We encountered an issue while loading the student information.</p>
-          <p>Please try again later or contact support.</p>
-          <a href="/stu/${studentId}" style="color: #fef3cd; text-decoration: none;">Try Loading ID Card →</a>
-        </div>
-      </body>
-    </html>
-    `
-    
-    return new NextResponse(errorHtml, {
-      status: 500,
-      headers: {
-        "Content-Type": "text/html",
-      },
-    })
+    console.error("Error logging request:", error)
   }
 }
 
-// Add support for HEAD requests (good for SEO)
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const apiKey = searchParams.get("key")
+  const studentId = searchParams.get("id")
+  
+  // Get all parameters to check for foreign ones
+  const allowedParams = ['key', 'id']
+  const allParams = Array.from(searchParams.keys())
+  const foreignParams = allParams.filter(param => !allowedParams.includes(param))
+
+  try {
+    // Check for foreign parameters
+    if (foreignParams.length > 0) {
+      return createErrorResponse(
+        "All was going well till you added one wrong parameter. Have you read my docs? Oya go read am",
+        400,
+        { 
+          foreignParameters: foreignParams,
+          allowedParameters: allowedParams,
+          tip: "Only 'key' and 'id' parameters are allowed"
+        }
+      )
+    }
+
+    // Check if no API key provided (welcome message with minimal HTML for browser)
+    if (!apiKey) {
+      const userAgent = request.headers.get('user-agent') || ''
+      const isBrowser = userAgent.includes('Mozilla') || userAgent.includes('Chrome') || userAgent.includes('Safari') || userAgent.includes('Firefox')
+      
+      
+      // For API clients (JSON response)
+      return NextResponse.json(
+        {
+          message: "Oh, Hi there, I am the NAPSS Unizik IDMS API. IDMS means Identity Management System. Go ahead and grab a key and let's talk json.",
+          api: {
+            name: "NAPSS Unizik IDMS API",
+            version: "1.0.0",
+            description: "Identity Management System for student data access",
+            endpoints: {
+              student: "/api/v1/id?key=YOUR_API_KEY&id=STUDENT_ID"
+            },
+            rateLimit: "5 requests per minute per API key",
+            requiredParameters: ["key", "id"],
+            developer: "Drexx codes",
+            administration: "Anchor Armstrong led administration"
+          },
+          documentation: {
+            baseUrl: "https://yoursite.com/api/v1/id",
+            authentication: "API Key required",
+            responseFormat: "JSON",
+            example: {
+              request: "/api/v1/id?key=your-api-key&id=CSC2020001",
+              response: {
+                success: true,
+                data: {
+                  firstName: "John",
+                  surname: "Doe",
+                  currentClass: "300 Level"
+                }
+              }
+            }
+          }
+        },
+        { 
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Version': '1.0.0',
+            'X-API-Name': 'NAPSS Unizik IDMS API'
+          }
+        }
+      )
+    }
+
+    // Check if student ID is provided
+    if (!studentId) {
+      return createErrorResponse(
+        "Student ID is required. Please provide the 'id' parameter.",
+        400,
+        {
+          requiredParameters: ["key", "id"],
+          example: "/api/v1/id?key=your-api-key&id=CSC2020001"
+        }
+      )
+    }
+
+    // Validate API key
+    const apiKeyRef = doc(db, "Api", apiKey)
+    const apiKeySnap = await getDoc(apiKeyRef)
+
+    if (!apiKeySnap.exists()) {
+      return createErrorResponse(
+        "Huh? Either I'm tripping or your API key is wrong, check if it exists",
+        401,
+        {
+          providedKey: apiKey.substring(0, 8) + "...", // Show partial key for debugging
+          tip: "Double-check your API key or contact support to get a new one"
+        }
+      )
+    }
+
+    const apiKeyData = apiKeySnap.data() as ApiKeyData
+
+    // Check if API key is banned
+    if (apiKeyData.isBanned) {
+      return createErrorResponse(
+        "Aw sorry dawg, looks like your key is banned. You can't access the IDMS API",
+        403,
+        {
+          keyId: apiKey.substring(0, 8) + "...",
+          contactSupport: "Contact support if you believe this is an error"
+        }
+      )
+    }
+
+    // Check and update rate limiting
+    const rateLimitResult = await checkAndUpdateRateLimit(apiKey, apiKeyData)
+    
+    if (rateLimitResult.isLimited) {
+      await logRequest(apiKey, studentId, "RATE_LIMITED", request)
+      
+      const timeRemaining = rateLimitResult.resetTime ? 
+        Math.ceil((rateLimitResult.resetTime.getTime() - new Date().getTime()) / 1000) : 60
+      
+      return createErrorResponse(
+        "Uhhhhh, NO! Who are you sending all this request to? Can't be me. You're in timeout! try in a minute",
+        429,
+        {
+          rateLimit: "5 requests per minute",
+          resetTimeSeconds: timeRemaining,
+          resetTime: rateLimitResult.resetTime?.toISOString(),
+          tip: "Slow down there, speed racer! Wait a minute before your next request"
+        }
+      )
+    }
+
+    // Fetch student data
+    const studentDocRef = doc(db, "enrollments", studentId)
+    const studentSnap = await getDoc(studentDocRef)
+
+    if (!studentSnap.exists()) {
+      await logRequest(apiKey, studentId, "STUDENT_NOT_FOUND", request)
+      
+      return createErrorResponse(
+        "Hmmm, can't seem to find this ID. Sure this belongs to a NAPSSITE?",
+        404,
+        {
+          searchedId: studentId,
+          tip: "Double-check the student registration number"
+        }
+      )
+    }
+
+    const studentData = studentSnap.data() as StudentData
+
+    // Calculate current class
+    const currentClass = calculateCurrentClass(studentData.yearOfAdmission)
+
+    // Prepare response data (only specified fields)
+    const responseData = {
+      createdAt: studentData.createdAt,
+      dateOfBirth: studentData.dateOfBirth,
+      firstName: studentData.firstName,
+      gender: studentData.gender,
+      lastName: studentData.lastName,
+      phoneNumber: studentData.phoneNumber,
+      registrationNumber: studentData.registrationNumber,
+      schoolEmail: studentData.schoolEmail,
+      surname: studentData.surname,
+      yearOfAdmission: studentData.yearOfAdmission,
+      currentClass: currentClass
+    }
+
+    // Log successful request
+    await logRequest(apiKey, studentId, "SUCCESS", request)
+
+    return createSuccessResponse(responseData)
+
+  } catch (error) {
+    console.error("IDMS API Error:", error)
+    
+    // Log error request if we have the API key
+    if (apiKey) {
+      await logRequest(apiKey, studentId || "unknown", "SERVER_ERROR", request)
+    }
+    
+    return createErrorResponse(
+      "Oops! Something went wrong on our end. Our engineers have been notified.",
+      500,
+      {
+        errorId: `ERR_${Date.now()}`,
+        tip: "Try again in a few moments, or contact support if the issue persists"
+      }
+    )
+  }
+}
+
+// Handle POST requests (not allowed)
+export async function POST(request: NextRequest) {
+  return createErrorResponse(
+    "POST method not allowed. This API only accepts GET requests.",
+    405,
+    {
+      allowedMethods: ["GET"],
+      tip: "Use GET request with query parameters instead"
+    }
+  )
+}
+
+// Handle PUT requests (not allowed)
+export async function PUT(request: NextRequest) {
+  return createErrorResponse(
+    "PUT method not allowed. This API only accepts GET requests.",
+    405,
+    {
+      allowedMethods: ["GET"],
+      tip: "Use GET request with query parameters instead"
+    }
+  )
+}
+
+// Handle DELETE requests (not allowed)
+export async function DELETE(request: NextRequest) {
+  return createErrorResponse(
+    "DELETE method not allowed. This API only accepts GET requests.",
+    405,
+    {
+      allowedMethods: ["GET"],
+      tip: "Use GET request with query parameters instead"
+    }
+  )
+}
+
+// Handle PATCH requests (not allowed)  
+export async function PATCH(request: NextRequest) {
+  return createErrorResponse(
+    "PATCH method not allowed. This API only accepts GET requests.",
+    405,
+    {
+      allowedMethods: ["GET"],
+      tip: "Use GET request with query parameters instead"
+    }
+  )
+}
+
+// Handle HEAD requests (for API health checks)
 export async function HEAD(request: NextRequest) {
-  const response = await GET(request)
   return new NextResponse(null, {
-    status: response.status,
-    headers: response.headers,
+    status: 200,
+    headers: {
+      'X-API-Status': 'healthy',
+      'X-API-Version': '1.0.0',
+      'X-Rate-Limit': '5 requests per minute'
+    }
   })
 }

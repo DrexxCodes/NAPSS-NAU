@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app"
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, setDoc, getDoc } from "firebase/firestore"
+import { getFirestore, collection, getDocs, doc, setDoc, getDoc } from "firebase/firestore"
 import { getAuth } from "firebase/auth"
 
 // Firebase configuration
@@ -19,19 +19,43 @@ const app = initializeApp(firebaseConfig)
 export const db = getFirestore(app)
 export const auth = getAuth(app)
 
+// Type definitions
+interface Level {
+  id: string
+  name: string
+  order?: number
+  [key: string]: unknown
+}
+
+interface StudentData {
+  registrationNumber: string
+  level: string
+  surname: string
+  firstName: string
+  lastName: string
+  gender: string
+  phoneNumber: string
+  schoolEmail: string
+  yearOfAdmission: string
+  dateOfBirth: string
+  createdAt: Date
+  status: string
+  [key: string]: unknown
+}
+
 // Firebase functions for enrollment
-export const fetchLevels = async () => {
+export const fetchLevels = async (): Promise<Level[]> => {
   try {
     const levelsRef = collection(db, "Levels")
     const querySnapshot = await getDocs(levelsRef)
 
-    const levels = querySnapshot.docs.map((doc) => ({
+    const levels: Level[] = querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
-    }))
+    } as Level))
 
     // Sort levels by order if available, otherwise by name
-    return levels.sort((a: any, b: any) => {
+    return levels.sort((a: Level, b: Level) => {
       if (a.order && b.order) {
         return a.order - b.order
       }
@@ -44,7 +68,7 @@ export const fetchLevels = async () => {
 }
 
 // Check if registration number already exists
-export const checkRegistrationExists = async (registrationNumber: string) => {
+export const checkRegistrationExists = async (registrationNumber: string): Promise<boolean> => {
   try {
     const enrollmentDocRef = doc(db, "enrollments", registrationNumber)
     const docSnap = await getDoc(enrollmentDocRef)
@@ -55,9 +79,9 @@ export const checkRegistrationExists = async (registrationNumber: string) => {
   }
 }
 
-export const submitEnrollment = async (studentData: any) => {
+export const submitEnrollment = async (studentData: StudentData): Promise<{ id: string; success: boolean }> => {
   try {
-    const { registrationNumber, level, ...otherData } = studentData
+    const { registrationNumber, level } = studentData
     
     // First check if registration number already exists
     const exists = await checkRegistrationExists(registrationNumber)
@@ -65,7 +89,7 @@ export const submitEnrollment = async (studentData: any) => {
       throw new Error(`Registration number ${registrationNumber} has already been enrolled. Each student can only be enrolled once.`)
     }
     
-    const enrollmentData = {
+    const enrollmentData: StudentData = {
       ...studentData,
       createdAt: new Date(),
       status: "pending",

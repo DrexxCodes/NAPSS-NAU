@@ -24,7 +24,7 @@ export default function IDMSUseCase() {
           <h2 className="content-title">NAPSS NAU Identity Management Service</h2>
 
           <p className="content-paragraph">
-            If you don't know what IDMS is, it's basically a system that helps manage and secure digital identities within an organization. In the context of NAPSS, IDMS is used to manage the identities and data of students. Aside from a physical card, we also issue a digital ID card on NAPSS Cloud Servers secured by Cyblack and with this you can upload your results and scholarships can be applied for on the portal and investors can use the API to see your data!
+            If you do not know what IDMS is, it is basically a system that helps manage and secure digital identities within an organization. In the context of NAPSS, IDMS is used to manage the identities and data of students. Aside from a physical card, we also issue a digital ID card on NAPSS Cloud Servers secured by Cyblack and with this you can upload your results and scholarships can be applied for on the portal and investors can use the API to see your data!
           </p>
 
           <div className="cta-section">

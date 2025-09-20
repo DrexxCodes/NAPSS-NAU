@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
+import Image from "next/image"
 import "../stu.css"
 
 interface StudentData {
@@ -16,7 +17,7 @@ interface StudentData {
   yearOfAdmission: string
   level: string
   stuPic?: string
-  createdAt: any
+  createdAt: { seconds: number; nanoseconds: number } | null
   status: string
 }
 
@@ -113,8 +114,8 @@ export default function StudentIDCardClient({ slug }: StudentIDCardClientProps) 
       <div className="student-id-page">
         <div className="error-container">
           <div className="error-icon">🤔</div>
-          <h2 className="error-title">Hmmm, looks like they're not on here.</h2>
-          <p className="error-message">Either they never enrolled or they're not a NAPSSITE.</p>
+          <h2 className="error-title">Hmmm, looks like they&apos;re not on here.</h2>
+          <p className="error-message">Either they never enrolled or they&apos;re not a NAPSSITE.</p>
           <div className="error-actions">
             <button onClick={() => window.location.reload()} className="retry-btn">
               🔄 Try Again
@@ -178,10 +179,12 @@ export default function StudentIDCardClient({ slug }: StudentIDCardClientProps) 
           {/* Student Photo */}
           <div className="photo-section">
             <div className="photo-container">
-              <img
+              <Image
                 src={student.stuPic || "/pfp.png"}
                 alt={`${student.firstName} ${student.surname}`}
                 className="student-photo"
+                width={150}
+                height={150}
                 onError={(e) => {
                   ;(e.target as HTMLImageElement).src = "/pfp.png"
                 }}

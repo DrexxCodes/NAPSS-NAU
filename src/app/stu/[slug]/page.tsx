@@ -14,7 +14,7 @@ interface StudentData {
   yearOfAdmission: string
   level: string
   stuPic?: string
-  createdAt: any
+  createdAt: { seconds: number; nanoseconds: number } | null
   status: string
 }
 

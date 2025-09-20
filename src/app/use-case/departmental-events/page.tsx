@@ -31,7 +31,7 @@ export default function DepartmentalEventsUseCase() {
             <div className="cta-content">
               <h3 className="cta-title">Ready for Event Check-in?</h3>
               <p className="cta-subtitle">
-                No dull, rush now to enroll for your NAPSS Smart ID Card and unlock a world of convenience and security. Live like you're in the future!
+                No dull, rush now to enroll for your NAPSS Smart ID Card and unlock a world of convenience and security. Live like you are in the future!
               </p>
               
               <Link href="/enrollment">
