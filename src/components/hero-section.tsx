@@ -2,6 +2,7 @@
 
 import { Button } from "./ui/button"
 import "./hero-section.css"
+import Link from "next/link"
 
 export function HeroSection() {
   return (
@@ -28,12 +29,16 @@ export function HeroSection() {
 
           {/* Call to Action Buttons */}
           <div className="hero-buttons">
-            <Button variant="primary" size="large">
-              Start Enrollment
-            </Button>
-            <Button variant="outline" size="large">
-              View Use Cases
-            </Button>
+            <Link href="/enrollment">
+              <Button variant="primary" size="large">
+                Start Enrollment
+              </Button>
+            </Link>
+            <Link href="#use-cases">
+              <Button variant="outline" size="large">
+                View Use Cases
+              </Button>
+            </Link>
           </div>
         </div>
       </div>

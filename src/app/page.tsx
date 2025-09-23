@@ -12,7 +12,7 @@ export default function Page() {
       <Navigation />
       <HeroSection />
       <TheCard />
-      <UseCases />
+      <div id="use-cases"><UseCases/></div>
       {/* <Faq /> */}
 
       <Footer />
